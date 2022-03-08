@@ -38,7 +38,8 @@ def setup_training(self):
     self.state_space = np.reshape(self.state_space, (5, 5, 5, 5))
 
     #setup q table that stores a weight for each possible state and action
-    self.q_table = np.zeros((5**4,5))
+    #initialize with ones since positive initial values encourage exploration in the start
+    self.q_table = np.ones((5**4,5))
 
 
 
@@ -98,7 +99,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     if old_game_state is not None and new_game_state is not None:
         approached = False
         #check for all directions if there was a priority and if that priority was pursued
-        #of course this will not be true if we collect a coin but coin collected just needs to be big enough
+        #of course this will not be true if we collect a coin but coin collected reward just needs to be big enough
         for i in range(3):
             if old_st[i] == 3 and action_str_to_int(self_action) == i:
                 approached = True
@@ -106,6 +107,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
             events.append(APPROACHED_EVENT)
         else:
             events.append(NAPPROACHED_EVENT)
+    #print(events)
 
 
     # state_to_features is defined in callbacks.py
@@ -152,7 +154,7 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     self.logger.debug(f'Encountered event(s) {", ".join(map(repr, events))} in final step')
     self.transitions.append(Transition(state_to_features(last_game_state), last_action, None, reward_from_events(self, events)))
 
-    print(self.model)
+    #print(self.model)
     # Store the model
     with open("my-saved-model.pt", "wb") as file:
         pickle.dump(self.model, file)
@@ -169,6 +171,7 @@ def reward_from_events(self, events: List[str]) -> int:
         e.COIN_COLLECTED: 5,
         e.KILLED_OPPONENT: 5,
         e.INVALID_ACTION : -2,
+        e.WAITED: -0.3,
         NAPPROACHED_EVENT: -0.5,
         APPROACHED_EVENT: 0.5
     }

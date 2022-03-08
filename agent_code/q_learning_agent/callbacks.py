@@ -30,7 +30,7 @@ def setup(self):
         self.logger.info("Loading model from saved state.")
         with open("my-saved-model.pt", "rb") as file:
             self.model = pickle.load(file)
-            print(self.model)
+            #print(self.model)
     #setup k-dimensional array where k is the number of features and store an id for each possible state
     self.state_space = np.arange(0, 5**4)
     self.state_space = np.reshape(self.state_space, (5, 5, 5, 5))
@@ -64,7 +64,7 @@ def act(self, game_state: dict) -> str:
 
     self.logger.debug("Querying model for action.")
     features = state_to_features(game_state)
-    #print(features)
+    print(features)
     state = encode_feature(self, features)
     pr = [.2, .2, .2, .2, .2]
     if np.max(self.model[state]) > 0:
@@ -91,7 +91,7 @@ def state_to_features(game_state: dict) -> np.array:
     """
     # This is the dict before the game begins and after it ends
     if game_state is None:
-        print('returning None')
+        #print('returning None')
         return None
 
     #store relevant parts of the state
@@ -118,48 +118,44 @@ def state_to_features(game_state: dict) -> np.array:
     if (self_pos[0] - 1,self_pos[1]) in coins:
         left = 2
 
-    #for all empty tiles, calculate the one closest to the next coin
-    if up == 0 or right == 0 or down == 0 or left == 0:
-        dist = [100, 100, 100, 100]
-        if up == 0:
-            #go through all coins in the relevant direction and get the closest, only works on a line
-            next_coin = (100, 100)
-            for coin in coins:
-                if coin[0] == self_pos[0] and coin[1] < self_pos[1]:
-                    next_coin = (min(coin[0], next_coin[0]), self_pos[1])
-            dist[0] = np.sqrt((next_coin[1] - self_pos[1])**2)
+    #for all empty tiles, calculate the one where the shortest path to the next coin starts using Dijkstra's algorithm
+    if up == 0 or right == 0 or down == 0 or left == 0 and len(coins) != 0 and not up == 2 and not right == 2 and not down == 2 and not left == 2:
+        current = self_pos
+        qu = [current]
+        previous = [0]
+        c = 0
+        success = False
+        destination = (0, 0)
+        #for a real game it makes sense to set the limit a lot lower to prevent the agent from chasing after far away coins
+        #TODO: for large numbers over 200, an error is occasionaly thrown for list index out of range at current = qu[c]
+        while c < 150 and not success:
+            neighbours = [(current[0], current[1] - 1), (current[0] + 1, current[1]), (current[0], current[1] + 1), (current[0] - 1, current[1])]
+            for neigh in neighbours:
+                if neigh in coins:
+                    #found the shortest path coin, break out of loops and store the last node
+                    success = True
+                    destination = current
+                    break
+                if field[neigh] == 0 and neigh not in qu:
+                    qu.append(neigh)
+                    previous.append(c)
+            if not success:
+                c += 1
+                current = qu[c]
+        #retrace the path to the neighbouring node of self
+        if success:
+            while previous[c] != 0:
+                c_temp = previous[c]
+                destination = qu[previous[c]]
+                c = c_temp
+        if destination == (self_pos[0], self_pos[1] - 1) and success:
+            up = 3
+        if destination == (self_pos[0] + 1, self_pos[1]) and success:
+            right = 3
+        if destination == (self_pos[0], self_pos[1] + 1) and success:
+            down = 3
+        if destination == (self_pos[0] - 1, self_pos[1]) and success:
+            left = 3
 
-        if right == 0:
-            next_coin = (100, 100)
-            for coin in coins:
-                if coin[1] == self_pos[1] and coin[0] > self_pos[0]:
-                    next_coin = (self_pos[0], min(coin[1], next_coin[1]))
-            dist[1] = np.sqrt((next_coin[0] - self_pos[0])**2)
 
-        if down == 0:
-            next_coin = (100, 100)
-            for coin in coins:
-                if coin[0] == self_pos[0] and coin[1] > self_pos[1]:
-                    next_coin = (min(coin[0], next_coin[0]), self_pos[1])
-            dist[2] = np.sqrt((next_coin[1] - self_pos[1])**2)
-
-        if left == 0:
-            next_coin = (100, 100)
-            for coin in coins:
-                if coin[1] == self_pos[1] and coin[0] < self_pos[0]:
-                    next_coin = (self_pos[0], min(coin[1], next_coin[1]))
-            dist[3] = np.sqrt((next_coin[0] - self_pos[0])**2)
-
-        #calculate the empty tile closest to the next coin and set it to 3
-        #check if there actually is a coin in a free lane
-        if np.min(dist) < 100:
-            closest = np.argmin(dist)
-            if closest == 0:
-                up = 3
-            if closest == 1:
-                right = 3
-            if closest == 2:
-                down = 3
-            if closest == 3:
-                left = 3
     return [up, right, down, left]
