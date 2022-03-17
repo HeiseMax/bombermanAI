@@ -51,7 +51,7 @@ def setup_training(self):
     self.q_table = np.ones((6**6, 6))
     self.q_table *= 10
 
-    self.learning_rate = 0.4
+    self.learning_rate = 0.3
     self.round = 1
 
 
@@ -270,10 +270,10 @@ def update_q_table(self):
             #translate action according to rotation and mirroring
             action_string = old_st[1][action_string]
             action = action_str_to_int(action_string)
-            print(self.q_table[old_state, action])
+            #print(self.q_table[old_state, action])
 
             self.q_table[old_state, action] = self.q_table[old_state, action] + self.learning_rate * (self.transitions[0][3] - self.q_table[old_state, action])
-            print(self.q_table[old_state, action])
+            #print(self.q_table[old_state, action])
 
         self.model = self.q_table
 

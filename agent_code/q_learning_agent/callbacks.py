@@ -127,7 +127,7 @@ def act(self, game_state: dict) -> str:
     :return: The action to take as a string.
     """
     # todo Exploration vs exploitation
-    random_prob = 0
+    random_prob = 0.05
     if self.train and random.random() < random_prob: #* 0.99**self.round:
         self.logger.debug("Choosing action purely at random.")
         # 80%: walk in any direction. 10% wait. 10% bomb.
@@ -180,8 +180,8 @@ def state_to_features(game_state: dict) -> np.array:
     coins = game_state['coins']
     bombs = game_state['bombs']
     bombs_loc = []
-    if len(bombs) > 0:
-        bombs_loc = bombs[:][0]
+    for i in range(len(bombs)):
+        bombs_loc.append(bombs[i][0])
     ex_map = game_state['explosion_map']
     enemies_loc = []
     #print(game_state['others'])
@@ -192,12 +192,15 @@ def state_to_features(game_state: dict) -> np.array:
     #create map of tiles that are in radius of a bomb, and store the countdown of the respective bomb in a dictionary
     danger_map = []
     countdown = {}
+
+
     for bomb in bombs:
         bomb_pos = bomb[0]
         #store countdown of bomb because it's going to be useful later on
-        countdown[bomb_pos] = bomb[1]
+        if bomb_pos not in danger_map:
+            countdown[bomb_pos] = [bomb[1]]
         if bomb_pos in danger_map:
-            countdown[bomb_pos] = 10
+            countdown[bomb_pos].append(bomb[1])
         #add all tiles in range of the bomb and not blocked by a wall to the map
         #up
         for i in range(3):
@@ -207,11 +210,9 @@ def state_to_features(game_state: dict) -> np.array:
                 break
             elif tile not in danger_map:
                 danger_map.append(tile)
-                countdown[tile] = bomb[1]
-            #problem: a tile can have up to 4 different countdowns if radii overlap
-            #this means they have to be tracked separately. For now I just set it to 10, meaning avoid at all cost
+                countdown[tile] = [bomb[1]]
             else:
-                countdown[tile] = 10
+                countdown[tile].append(bomb[1])
         #right
         for i in range(3):
             tile = (bomb_pos[0] + i + 1, bomb_pos[1])
@@ -220,9 +221,9 @@ def state_to_features(game_state: dict) -> np.array:
                 break
             elif tile not in danger_map:
                 danger_map.append(tile)
-                countdown[tile] = bomb[1]
+                countdown[tile] = [bomb[1]]
             else:
-                countdown[tile] = 10
+                countdown[tile].append(bomb[1])
         #down
         for i in range(3):
             tile = (bomb_pos[0], bomb_pos[1] + i + 1)
@@ -231,9 +232,9 @@ def state_to_features(game_state: dict) -> np.array:
                 break
             elif tile not in danger_map:
                 danger_map.append(tile)
-                countdown[tile] = bomb[1]
+                countdown[tile] = [bomb[1]]
             else:
-                countdown[tile] = 10
+                countdown[tile].append(bomb[1])
         #left
         for i in range(3):
             tile = (bomb_pos[0] - i - 1, bomb_pos[1])
@@ -242,9 +243,9 @@ def state_to_features(game_state: dict) -> np.array:
                 break
             elif tile not in danger_map:
                 danger_map.append(tile)
-                countdown[tile] = bomb[1]
+                countdown[tile] = [bomb[1]]
             else:
-                countdown[tile] = 10
+                countdown[tile].append(bomb[1])
 
 
 
@@ -260,7 +261,7 @@ def state_to_features(game_state: dict) -> np.array:
     #determine how safe the currently occupied field is
     #safe = 0
     #in explosion range = 1
-    #on bomb = 2
+    #on bomb = 1
     #test with only danger as bomb information might be redundant for decision making
     self = 0
     if self_pos in danger_map:
@@ -313,7 +314,7 @@ def state_to_features(game_state: dict) -> np.array:
     if ((self_pos[0], self_pos[1] - 1) in bombs_loc or ex_map[self_pos[0]] [self_pos[1] - 1] > 0) and field[self_pos[0]][self_pos[1] - 1] != 1:
         up = 4
     if (self_pos[0], self_pos[1] - 1) in danger_map:
-        if not 10 > countdown[(self_pos[0], self_pos[1] - 1)] > 0 and field[self_pos[0]][self_pos[1] - 1] != 1:
+        if not min(countdown[(self_pos[0], self_pos[1] - 1)]) > 0 and field[self_pos[0]][self_pos[1] - 1] != 1:
             up = 4
         #this is a lazy fix for a rare case where the agent places a bomb next to a coin that leads into a dead end.
         #a better version would search if the coin really leads to a dead end or not
@@ -323,7 +324,7 @@ def state_to_features(game_state: dict) -> np.array:
     if ((self_pos[0] + 1, self_pos[1]) in bombs_loc or ex_map[self_pos[0] + 1] [self_pos[1]] > 0) and field[self_pos[0] + 1][self_pos[1]] != 1:
         right = 4
     if (self_pos[0] + 1, self_pos[1]) in danger_map:
-        if not 10 > countdown[(self_pos[0] + 1, self_pos[1])] > 0 and field[self_pos[0] + 1][self_pos[1]] != 1:
+        if not min(countdown[(self_pos[0] + 1, self_pos[1])]) > 0 and field[self_pos[0] + 1][self_pos[1]] != 1:
             right = 4
         if self_pos in bombs_loc and field[self_pos[0] + 1][self_pos[1]] != 1:
             right = 4
@@ -331,7 +332,7 @@ def state_to_features(game_state: dict) -> np.array:
     if ((self_pos[0], self_pos[1] + 1) in bombs_loc or ex_map[self_pos[0]] [self_pos[1] + 1] > 0) and field[self_pos[0]][self_pos[1] + 1] != 1:
         down = 4
     if (self_pos[0], self_pos[1] + 1) in danger_map:
-        if not 10 > countdown[(self_pos[0], self_pos[1] + 1)] > 0 and field[self_pos[0]][self_pos[1] + 1] != 1:
+        if not min(countdown[(self_pos[0], self_pos[1] + 1)]) > 0 and field[self_pos[0]][self_pos[1] + 1] != 1:
             down = 4
         if self_pos in bombs_loc and field[self_pos[0]][self_pos[1] + 1] != 1:
             down = 4
@@ -339,7 +340,7 @@ def state_to_features(game_state: dict) -> np.array:
     if ((self_pos[0] - 1, self_pos[1]) in bombs_loc or ex_map[self_pos[0] - 1] [self_pos[1]] > 0) and field[self_pos[0] - 1][self_pos[1]] != 1:
         left = 4
     if (self_pos[0] - 1, self_pos[1]) in danger_map:
-        if not 10 > countdown[(self_pos[0] - 1, self_pos[1])] > 0 and field[self_pos[0] - 1][self_pos[1]] != 1:
+        if not min(countdown[(self_pos[0] - 1, self_pos[1])]) > 0 and field[self_pos[0] - 1][self_pos[1]] != 1:
             left = 4
         if self_pos in bombs_loc and field[self_pos[0] - 1][self_pos[1]] != 1:
             left = 4
@@ -373,10 +374,10 @@ def state_to_features(game_state: dict) -> np.array:
                         valid = False
                     #check if there is an explosion scheduled for when we would arrive on the field
                     if neigh in danger_map:
-                        if countdown[neigh] == 10 or dist[current] == countdown[neigh] + 1 or dist[current] == countdown[neigh]:
+                        if dist[current] == min(countdown[neigh]) + 1 or dist[current] == min(countdown[neigh]):
                             valid = False
                     if neigh in bombs_loc:
-                        if dist[current] < countdown[neigh] + 4:
+                        if dist[current] < min(countdown[neigh]) + 4:
                             valid = False
                     #check if the tile is directly adjacent and there is currently an explosion that lasts for another turn
                     if ex_map[neigh] > 0 and dist[current] == 0:
@@ -429,10 +430,10 @@ def state_to_features(game_state: dict) -> np.array:
                         valid = False
                     #check if there is an explosion scheduled for when we would arrive on the field
                     if neigh in danger_map:
-                        if countdown[neigh] == 10 or dist[current] == countdown[neigh] + 1 or dist[current] == countdown[neigh]:
+                        if dist[current] == min(countdown[neigh]) + 1 or dist[current] == min(countdown[neigh]):
                             valid = False
                     if neigh in bombs_loc:
-                        if dist[current] < countdown[neigh] + 4:
+                        if dist[current] < min(countdown[neigh]) + 4:
                             valid = False
                     #check if the tile is directly adjacent and there is currently an explosion that lasts for another turn
                     if ex_map[neigh] > 0 and dist[current] == 0:
@@ -521,11 +522,11 @@ def state_to_features(game_state: dict) -> np.array:
                         valid = False
                     #check if there is an explosion scheduled for when we would arrive on the field
                     if neigh in danger_map:
-                        if countdown[neigh] == 10 or dist[current] == countdown[neigh] + 1 or dist[current] == countdown[neigh]:
+                        if dist[current] == min(countdown[neigh]) + 1 or dist[current] == min(countdown[neigh]):
                             valid = False
                     #cant get past the bomb, if we find it, it means we are in its radius
                     if neigh in bombs_loc:
-                        if dist[current] < countdown[neigh] + 4:
+                        if dist[current] < min(countdown[neigh]) + 4:
                             valid = False
                     #check if the tile is directly adjacent and there is currently an explosion that lasts for another turn
                     if ex_map[neigh] > 0 and dist[current] == 0:
