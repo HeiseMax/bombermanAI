@@ -26,6 +26,7 @@ def setup(self):
     if self.train or not os.path.isfile("my-saved-model.pt"):
         self.logger.info("Setting up model from scratch.")
         self.model = np.ones((6**6, 6))
+        self.model *= 10
     else:
         self.logger.info("Loading model from saved state.")
         with open("my-saved-model.pt", "rb") as file:
@@ -64,11 +65,11 @@ def create_additional_feature_states(features):
     actions_rot_3 = {"RIGHT": "DOWN", "LEFT" : "UP", "UP": "RIGHT", "DOWN": "LEFT", "WAIT": "WAIT", "BOMB": "BOMB"}
 
     mirrored_actions = {"RIGHT": "RIGHT", "LEFT" : "LEFT", "UP": "DOWN", "DOWN": "UP", "WAIT": "WAIT", "BOMB": "BOMB"}
-    mirrored_actions_rot_1 = {"RIGHT": "DOWN", "LEFT" : "UP", "UP": "LEFT", "DOWN": "RIGHT", "WAIT": "WAIT", "BOMB": "BOMB"}
+    mirrored_actions_rot_1 = {"RIGHT": "UP", "LEFT" : "DOWN", "UP": "RIGHT", "DOWN": "LEFT", "WAIT": "WAIT", "BOMB": "BOMB"}
     mirrored_actions_rot_2 = {"RIGHT": "LEFT", "LEFT" : "RIGHT", "UP": "UP", "DOWN": "DOWN", "WAIT": "WAIT", "BOMB": "BOMB"}
-    mirrored_actions_rot_3 = {"RIGHT": "UP", "LEFT" : "DOWN", "UP": "RIGHT", "DOWN": "LEFT", "WAIT": "WAIT", "BOMB": "BOMB"}
+    mirrored_actions_rot_3 = {"RIGHT": "DOWN", "LEFT" : "UP", "UP": "LEFT", "DOWN": "RIGHT", "WAIT": "WAIT", "BOMB": "BOMB"}
 
-    additional_states.append((initial_state, actions))
+    additional_states.append((initial_state, actions, actions))
     additional_states.append((initial_state_rot_1, actions_rot_1))
     additional_states.append((initial_state_rot_2, actions_rot_2))
     additional_states.append((initial_state_rot_3, actions_rot_3))
@@ -82,12 +83,12 @@ def create_additional_feature_states(features):
 
 
 def rotate_features(features):
-    #rotate clockwise
+    #rotate counter-clockwise
     temp = features.copy()
-    temp[0] = features[3]
-    temp[1] = features[0]
-    temp[2] = features[1]
-    temp[3] = features[2]
+    temp[0] = features[1]
+    temp[1] = features[2]
+    temp[2] = features[3]
+    temp[3] = features[0]
     return temp
 
 def mirror_features(features):
@@ -97,6 +98,7 @@ def mirror_features(features):
     temp[2] = features[0]
     return temp
 
+"""
 def choose_state(self, more_states):
     chosen_state = more_states[0]
     found = False
@@ -105,13 +107,14 @@ def choose_state(self, more_states):
         encoded = encode_feature(self, more_states[i][0])
         #elements are initialized with one, therefore if this a true, we have found an edited entry
         for element in self.model[encoded]:
-            if element != 1:
+            if element != 10:
                 chosen_state = more_states[i]
         if found:
             break
 
     #returns features and dictionary to transform actions
     return chosen_state
+"""
 
 
 def act(self, game_state: dict) -> str:
@@ -124,33 +127,29 @@ def act(self, game_state: dict) -> str:
     :return: The action to take as a string.
     """
     # todo Exploration vs exploitation
-    random_prob = .05
+    random_prob = 0
     if self.train and random.random() < random_prob: #* 0.99**self.round:
         self.logger.debug("Choosing action purely at random.")
         # 80%: walk in any direction. 10% wait. 10% bomb.
-        return np.random.choice(ACTIONS, p=[.25, .25, .25, .25, .0, .0])
+        return np.random.choice(ACTIONS, p =[.2, .2, .2, .2, .1, .1])
 
     self.logger.debug("Querying model for action.")
     features = state_to_features(game_state)
     #print(features)
+    state = encode_feature(self, features)
 
-    #mirror and rotate game creating more equivalent states and look up if there already is an entry in the table for one
-    #of those states, in which case use that one.
-    more_states = create_additional_feature_states(features)
-    chosen_state = choose_state(self, more_states)
-    #print(chosen_state)
-    state = encode_feature(self, chosen_state[0])
     pr = [1/6, 1/6, 1/6, 1/6, 1/6, 1/6]
 
     if np.max(self.model[state]) > 0:
         pr = np.maximum(self.model[state], 0)
     pr /= np.sum(pr)
+    print(features, '\n', self.model[state])
+    #print(self.model[state])
     #print(pr)
 
     a = np.random.choice(ACTIONS, p=pr) #ACTIONS[np.argmax(state_to_features(game_state)@self.model)]
     #adjust action according to game state transformation via dictionary
     #print(a)
-    a = chosen_state[1][a]
     self.logger.debug(f'Action taken: {a}')
     #print(a)
     return a#np.random.choice(ACTIONS, p=state_to_features(game_state)@self.model/np.sum(state_to_features(game_state)@self.model))
@@ -184,6 +183,11 @@ def state_to_features(game_state: dict) -> np.array:
     if len(bombs) > 0:
         bombs_loc = bombs[:][0]
     ex_map = game_state['explosion_map']
+    enemies_loc = []
+    #print(game_state['others'])
+    #print(game_state['others'][:][3])
+    for i in range(len(game_state['others'])):
+        enemies_loc.append(game_state['others'][i][3])
 
     #create map of tiles that are in radius of a bomb, and store the countdown of the respective bomb in a dictionary
     danger_map = []
@@ -284,6 +288,16 @@ def state_to_features(game_state: dict) -> np.array:
     if (self_pos[0] - 1,self_pos[1]) in danger_map and field[self_pos[0] - 1][self_pos[1]] != 1:
         left = 4
 
+    #if there is an opponent potentially blocking the tile, set feature to 4, (but only if already on it)
+    if (self_pos[0], self_pos[1] - 1) in enemies_loc:
+        up = 4
+    if (self_pos[0] + 1, self_pos[1]) in enemies_loc:
+        right = 4
+    if (self_pos[0], self_pos[1] + 1) in enemies_loc:
+        down = 4
+    if (self_pos[0] - 1,self_pos[1]) in enemies_loc:
+        left = 4
+
     #if there is a coin on the tile, set feature to 2, overrides danger, but can be overridden again in next step if
     #danger is immediate enough
     if (self_pos[0], self_pos[1] - 1) in coins:
@@ -299,25 +313,35 @@ def state_to_features(game_state: dict) -> np.array:
     if ((self_pos[0], self_pos[1] - 1) in bombs_loc or ex_map[self_pos[0]] [self_pos[1] - 1] > 0) and field[self_pos[0]][self_pos[1] - 1] != 1:
         up = 4
     if (self_pos[0], self_pos[1] - 1) in danger_map:
-        if not 10 > countdown[(self_pos[0], self_pos[1] - 1)] > 0 and field[self_pos[0] - 1][self_pos[1]] != 1:
+        if not 10 > countdown[(self_pos[0], self_pos[1] - 1)] > 0 and field[self_pos[0]][self_pos[1] - 1] != 1:
+            up = 4
+        #this is a lazy fix for a rare case where the agent places a bomb next to a coin that leads into a dead end.
+        #a better version would search if the coin really leads to a dead end or not
+        if self_pos in bombs_loc and field[self_pos[0]][self_pos[1] - 1] != 1:
             up = 4
 
     if ((self_pos[0] + 1, self_pos[1]) in bombs_loc or ex_map[self_pos[0] + 1] [self_pos[1]] > 0) and field[self_pos[0] + 1][self_pos[1]] != 1:
         right = 4
     if (self_pos[0] + 1, self_pos[1]) in danger_map:
-        if not 10 > countdown[(self_pos[0] + 1, self_pos[1])] > 0 and field[self_pos[0] - 1][self_pos[1]] != 1:
+        if not 10 > countdown[(self_pos[0] + 1, self_pos[1])] > 0 and field[self_pos[0] + 1][self_pos[1]] != 1:
+            right = 4
+        if self_pos in bombs_loc and field[self_pos[0] + 1][self_pos[1]] != 1:
             right = 4
 
     if ((self_pos[0], self_pos[1] + 1) in bombs_loc or ex_map[self_pos[0]] [self_pos[1] + 1] > 0) and field[self_pos[0]][self_pos[1] + 1] != 1:
         down = 4
     if (self_pos[0], self_pos[1] + 1) in danger_map:
-        if not 10 > countdown[(self_pos[0], self_pos[1] + 1)] > 0 and field[self_pos[0] - 1][self_pos[1]] != 1:
+        if not 10 > countdown[(self_pos[0], self_pos[1] + 1)] > 0 and field[self_pos[0]][self_pos[1] + 1] != 1:
+            down = 4
+        if self_pos in bombs_loc and field[self_pos[0]][self_pos[1] + 1] != 1:
             down = 4
 
     if ((self_pos[0] - 1, self_pos[1]) in bombs_loc or ex_map[self_pos[0] - 1] [self_pos[1]] > 0) and field[self_pos[0] - 1][self_pos[1]] != 1:
         left = 4
     if (self_pos[0] - 1, self_pos[1]) in danger_map:
         if not 10 > countdown[(self_pos[0] - 1, self_pos[1])] > 0 and field[self_pos[0] - 1][self_pos[1]] != 1:
+            left = 4
+        if self_pos in bombs_loc and field[self_pos[0] - 1][self_pos[1]] != 1:
             left = 4
 
     #for all empty tiles, calculate the one where the shortest path to the next coin starts using Dijkstra's algorithm
@@ -339,7 +363,7 @@ def state_to_features(game_state: dict) -> np.array:
             c = 1
             success = False
             #for a real game it makes sense to set the limit a lot lower to prevent the agent from chasing after far away coins
-            while c < 120 and not success:
+            while c < 174 and not success:
                 neighbours = [(current[0], current[1] - 1), (current[0] + 1, current[1]), (current[0], current[1] + 1), (current[0] - 1, current[1])]
                 for neigh in neighbours:
                     #figure out if a field is a valid via if_statements and then store as boolean and either append to queue or find coin
@@ -395,7 +419,7 @@ def state_to_features(game_state: dict) -> np.array:
             #found = []
             #dist = []
             #for a real game it makes sense to set the limit a lot lower to prevent the agent from chasing after far away coins
-            while c < 120 and not success:
+            while c < 174 and not success:
                 neighbours = [(current[0], current[1] - 1), (current[0] + 1, current[1]), (current[0], current[1] + 1), (current[0] - 1, current[1])]
                 for neigh in neighbours:
                     #figure out if a field is a valid via if_statements and then store as boolean and either append to queue or find crate
@@ -478,7 +502,7 @@ def state_to_features(game_state: dict) -> np.array:
                 while dist[best_crate] > 1:
                     best_crate = previous[best_crate]
         #get out of danger , even if there are no coins or crates or standing next to a crate or coin
-        elif (nearest_coin is None and best_crate is None) and self == 1 or self == 2:
+        elif (nearest_coin is None and best_crate is None) and self == 1:
             current = self_pos
             qu = [current]
             previous = {}
@@ -487,7 +511,7 @@ def state_to_features(game_state: dict) -> np.array:
             dist = {}
             dist[current] = 0
 
-            while c < 120 and not success:
+            while c < 174 and not success:
                 neighbours = [(current[0], current[1] - 1), (current[0] + 1, current[1]), (current[0], current[1] + 1), (current[0] - 1, current[1])]
                 for neigh in neighbours:
                     #figure out if a field is a valid via if_statements and then store as boolean and either append to queue or find coin
@@ -508,6 +532,9 @@ def state_to_features(game_state: dict) -> np.array:
                         valid = False
                     if field[neigh] == 0 and neigh not in danger_map and valid:
                         #found the shortest path safe field, break out of loops and store the last node
+                        previous[neigh] = current
+                        dist[neigh] = dist[current] + 1
+                        current = neigh
                         success = True
                         break
                     if field[neigh] == 0 and valid:
