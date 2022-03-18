@@ -28,6 +28,8 @@ BOMB_NEAR_CRATE_EVENT = 'BOMB_NEAR_CRATE'
 COIN_NOT_COLLECTED_EVENT = 'COIN_NOT_COLLECTED'
 AVOIDED_DANGER_EVENT = 'AVOIDED_DANGER'
 RUN_INTO_DANGER_EVENT = 'RUN_INTO_DANGER'
+BOMB_LATE_GAME_EVENT = 'BOMB_LATE_GAME'
+DODGED_EVENT = 'DODGED'
 
 
 def setup_training(self):
@@ -111,7 +113,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         event_state = new_st
     else:
         event_state = old_st
-    events = add_events(event_state, self_action, events)
+    events = add_events(event_state, new_st, self_action, events)
 
     # state_to_features is defined in callbacks.py
     self.transitions.append(Transition(old_st, self_action, new_st, reward_from_events(self, events)))
@@ -135,7 +137,7 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     :param self: The same object that is passed to all of your callbacks.
     """
     self.logger.debug(f'Encountered event(s) {", ".join(map(repr, events))} in final step')
-    events = add_events(state_to_features(last_game_state), last_action, events)
+    events = add_events(state_to_features(last_game_state), state_to_features(last_game_state), last_action, events)
     self.transitions.append(Transition(state_to_features(last_game_state), last_action, None, reward_from_events(self, events)))
 
     update_q_table(self)
@@ -151,7 +153,7 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
         pickle.dump(self.model, file)
 
 
-def add_events(event_state, self_action, events):
+def add_events(event_state, new_state, self_action, events):
     # Idea: Add your own events to hand out rewards
     priority_exists = False
     for i in range(4):
@@ -196,13 +198,33 @@ def add_events(event_state, self_action, events):
     if suicidal:
         events.append(RUN_INTO_DANGER_EVENT)
 
+    #reward dropping bombs late game when there is no priority or immediate danger or crate or coin
+    late_game = True
+    exit_available = False
+    for i in range(4):
+        if event_state[i] > 0 and event_state[i] != 4:
+            late_game = False
+        if event_state[i] == 0:
+            exit_available = True
+    if late_game and e.BOMB_DROPPED in events and event_state[5] == 0 and exit_available:
+        events.append(BOMB_LATE_GAME_EVENT)
+
     #add event indicating that a bomb was dropped next to a crate:
     near_crate = False
     for i in range(4):
         if event_state[i] == 1 and e.BOMB_DROPPED in events:
             near_crate = True
-    if near_crate:
+    if near_crate and exit_available:
         events.append(BOMB_NEAR_CRATE_EVENT)
+
+    #reward moving out of danger
+    dodged = False
+    if event_state[5] == 1:
+        if new_state[5] == 0:
+            dodged = True
+    if dodged:
+        events.append(DODGED_EVENT)
+
     #print(events)
     return events
 
@@ -314,6 +336,8 @@ def reward_from_events(self, events: List[str]) -> int:
         COIN_NOT_COLLECTED_EVENT: -4,
         AVOIDED_DANGER_EVENT: 5,
         RUN_INTO_DANGER_EVENT: -5,
+        BOMB_LATE_GAME_EVENT: 9,
+        DODGED_EVENT: 5,
     }
     reward_sum = 0
     for event in events:

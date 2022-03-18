@@ -247,6 +247,23 @@ def state_to_features(game_state: dict) -> np.array:
             else:
                 countdown[tile].append(bomb[1])
 
+    #append all tiles which are reachable by enemies in 3 steps or less
+    #even though it's multiple nested for-loops, the complexity isn't high since it's always only 4 iterations
+    near_enemy = []
+    for enemy in enemies_loc:
+        neighbours = [(enemy[0], enemy[1] - 1), (enemy[0] + 1, enemy[1]), (enemy[0], enemy[1] + 1), (enemy[0] - 1, enemy[1])]
+        for neigh in neighbours:
+            if neigh != - 1 and neigh != 1 and neigh not in near_enemy:
+                near_enemy.append(neigh)
+                second_row = [(neigh[0], neigh[1] - 1), (neigh[0] + 1, neigh[1]), (neigh[0], neigh[1] + 1), (neigh[0] - 1, neigh[1])]
+                for tile in second_row:
+                    if tile != - 1 and tile != 1 and tile not in near_enemy:
+                        near_enemy.append(tile)
+                        third_row = [(tile[0], tile[1] - 1), (tile[0] + 1, tile[1]), (tile[0], tile[1] + 1), (tile[0] - 1, tile[1])]
+                        for last in third_row:
+                            if last != - 1 and last != 1 and last not in near_enemy:
+                                near_enemy.append(last)
+
 
 
     #is the bomb action currently available?
@@ -354,6 +371,7 @@ def state_to_features(game_state: dict) -> np.array:
         best_crate = None
         escape_route = None
         escape = False
+        nearest_enemy = None
         #not necessary if we already stand next to a coin
         if len(coins) != 0 and not up == 2 and not right == 2 and not down == 2 and not left == 2:
             current = self_pos
@@ -445,8 +463,6 @@ def state_to_features(game_state: dict) -> np.array:
                         crate_score = dist[current]
                         success = True
                         break
-                    #check that tile is empty and has no explosion scheduled for when the agent would step on it
-                    #doesn't handle cases where multiple danger sources overlap, yet. In that case the path is just discarded.
                     if field[neigh] == 0 and valid:
                         qu.append(neigh)
                         previous[neigh] = current
@@ -502,8 +518,59 @@ def state_to_features(game_state: dict) -> np.array:
                 best_crate = current
                 while dist[best_crate] > 1:
                     best_crate = previous[best_crate]
+
+        #during endgame (i.e. no more coins or crates on the map) start collecting enemies
+        if len(coins) == 0 and best_crate is None and not up == 1 and not right == 1 and not down == 1 and not left == 1 and self_pos not in near_enemy:
+            current = self_pos
+            dist = {}
+            dist[current] = 0
+
+            qu = [current]
+            previous = {}
+            c = 1
+            success = False
+
+            while c < 174 and not success:
+                neighbours = [(current[0], current[1] - 1), (current[0] + 1, current[1]), (current[0], current[1] + 1), (current[0] - 1, current[1])]
+                for neigh in neighbours:
+                    #figure out if a field is a valid via if_statements and then store as boolean and either append to queue or find coin
+                    valid = True
+                    #check if neigh has already been visited
+                    if neigh in qu:
+                        valid = False
+                    #check if there is an explosion scheduled for when we would arrive on the field
+                    if neigh in danger_map:
+                        if dist[current] == min(countdown[neigh]) + 1 or dist[current] == min(countdown[neigh]):
+                            valid = False
+                    if neigh in bombs_loc:
+                        if dist[current] < min(countdown[neigh]) + 4:
+                            valid = False
+                    #check if the tile is directly adjacent and there is currently an explosion that lasts for another turn
+                    if ex_map[neigh] > 0 and dist[current] == 0:
+                        valid = False
+                    if neigh in near_enemy and valid and neigh not in danger_map:
+                        #found the shortest path enemy, break out of loops and store the last node
+                        success = True
+                        break
+                    if field[neigh] == 0 and valid:
+                        qu.append(neigh)
+                        previous[neigh] = current
+                        dist[neigh] = dist[current] + 1
+                #no path possible
+                if not success and len(qu) <= c:
+                    break
+                if not success:
+                    c += 1
+                    current = qu[c - 1]
+            #retrace the path to the neighbouring node of self
+            if success:
+                nearest_enemy = current
+                while dist[nearest_enemy] > 1:
+                    nearest_enemy = previous[nearest_enemy]
+
+
         #get out of danger , even if there are no coins or crates or standing next to a crate or coin
-        elif (nearest_coin is None and best_crate is None) and self == 1:
+        if  self == 1: #(nearest_coin is None and best_crate is None) and
             current = self_pos
             qu = [current]
             previous = {}
@@ -511,8 +578,13 @@ def state_to_features(game_state: dict) -> np.array:
             success = False
             dist = {}
             dist[current] = 0
+            routes = []
+            priority = {}
+            priority[current] = 0
+            score = []
+            print('escape')
 
-            while c < 174 and not success:
+            while c < 174:
                 neighbours = [(current[0], current[1] - 1), (current[0] + 1, current[1]), (current[0], current[1] + 1), (current[0] - 1, current[1])]
                 for neigh in neighbours:
                     #figure out if a field is a valid via if_statements and then store as boolean and either append to queue or find coin
@@ -535,37 +607,48 @@ def state_to_features(game_state: dict) -> np.array:
                         #found the shortest path safe field, break out of loops and store the last node
                         previous[neigh] = current
                         dist[neigh] = dist[current] + 1
-                        current = neigh
+                        priority[neigh] = priority[current] + 1
+                        if neigh in near_enemy:
+                            priority[neigh] += 10
+                        score.append(priority[neigh])
+                        routes.append(neigh)
                         success = True
-                        break
+                        continue
                     if field[neigh] == 0 and valid:
                         qu.append(neigh)
                         previous[neigh] = current
                         dist[neigh] = dist[current] + 1
+                        priority[neigh] = priority[current] + 1
+                        #prioritize routes that avoid enemies
+                        if neigh in near_enemy:
+                            priority[neigh] += 2
                 #no path possible
-                if not success and len(qu) <= c:
+                if len(qu) <= c:
                     break
-                if not success:
+                if True:
                     c += 1
                     current = qu[c - 1]
             #retrace the path to the neighbouring node of self
             if success:
                 escape = True
-                escape_route = current
-                while dist[escape_route] > 1:
+                print (score)
+                print(routes)
+                index = np.argmin(score)
+                escape_route = routes[index]
+                while previous[escape_route] != self_pos:
                     escape_route = previous[escape_route]
 
 
-        if coin_dist < 10000 or crate_score < 10000 or escape:
+        if coin_dist < 10000 or crate_score < 10000 or escape or nearest_enemy is not None:
             #hyperparameter: how to weigh coin distance
-            coin_dist = coin_dist/20
             if nearest_coin is not None:
                 destination = nearest_coin
             else:
                 destination = best_crate
+            if nearest_enemy is not None:
+                destination = nearest_enemy
             if escape:
                 destination = escape_route
-
             if destination == (self_pos[0], self_pos[1] - 1):
                 up = 3
             if destination == (self_pos[0] + 1, self_pos[1]):
