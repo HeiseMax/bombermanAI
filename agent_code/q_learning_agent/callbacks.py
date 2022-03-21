@@ -249,21 +249,31 @@ def state_to_features(game_state: dict) -> np.array:
 
     #append all tiles which are reachable by enemies in 3 steps or less
     #even though it's multiple nested for-loops, the complexity isn't high since it's always only 4 iterations
+    #adj_enemy only contains the tiles directly adjacent to each enemy
     near_enemy = []
+    adj_enemy = []
+    two_step_enemy = []
     for enemy in enemies_loc:
         neighbours = [(enemy[0], enemy[1] - 1), (enemy[0] + 1, enemy[1]), (enemy[0], enemy[1] + 1), (enemy[0] - 1, enemy[1])]
         for neigh in neighbours:
-            if neigh != - 1 and neigh != 1 and neigh not in near_enemy:
-                near_enemy.append(neigh)
+            if field[neigh] != - 1 and field[neigh] != 1:
+                if neigh not in near_enemy:
+                    near_enemy.append(neigh)
+                if neigh not in two_step_enemy:
+                    two_step_enemy.append(neigh)
+                adj_enemy.append(neigh)
                 second_row = [(neigh[0], neigh[1] - 1), (neigh[0] + 1, neigh[1]), (neigh[0], neigh[1] + 1), (neigh[0] - 1, neigh[1])]
                 for tile in second_row:
-                    if tile != - 1 and tile != 1 and tile not in near_enemy:
-                        near_enemy.append(tile)
+                    if field[tile] != - 1 and field[tile] != 1:
+                        if tile not in near_enemy:
+                            near_enemy.append(tile)
+                        if tile not in two_step_enemy:
+                            two_step_enemy.append(tile)
                         third_row = [(tile[0], tile[1] - 1), (tile[0] + 1, tile[1]), (tile[0], tile[1] + 1), (tile[0] - 1, tile[1])]
                         for last in third_row:
-                            if last != - 1 and last != 1 and last not in near_enemy:
-                                near_enemy.append(last)
-
+                            if field[last] != - 1 and field[last] != 1:
+                                if last not in near_enemy:
+                                    near_enemy.append(last)
 
 
     #is the bomb action currently available?
@@ -401,6 +411,16 @@ def state_to_features(game_state: dict) -> np.array:
                     if ex_map[neigh] > 0 and dist[current] == 0:
                         valid = False
                     if neigh in coins and valid and neigh not in danger_map:
+
+                        #avoid running into a dead end if near an enemy
+                        if self_pos in near_enemy:
+                            free_tiles = 0
+                            adjacent = [(neigh[0], neigh[1] - 1), (neigh[0] + 1, neigh[1]), (neigh[0], neigh[1] + 1), (neigh[0] - 1, neigh[1])]
+                            for adj in adjacent:
+                                if field[adj] == 0:
+                                    free_tiles += 1
+                            if free_tiles < 2:
+                                continue
                         #found the shortest path coin, break out of loops and store the last node
                         success = True
                         coin_dist = dist[current]
@@ -460,6 +480,17 @@ def state_to_features(game_state: dict) -> np.array:
                         #if there are 3 crates adjacent and this is the first tile we find, it's the only tile we store,
                         #if it has two we search one more time etc,
                         #crate_tiles_found += 1
+
+                        #avoid running into a dead end if near an enemy
+                        if self_pos in near_enemy:
+                            free_tiles = 0
+                            for adj in neighbours:
+                                if field[adj] == 0:
+                                    free_tiles += 1
+                            if free_tiles < 2:
+                                continue
+
+
                         crate_score = dist[current]
                         success = True
                         break
@@ -520,7 +551,7 @@ def state_to_features(game_state: dict) -> np.array:
                     best_crate = previous[best_crate]
 
         #during endgame (i.e. no more coins or crates on the map) start collecting enemies
-        if len(coins) == 0 and best_crate is None and not up == 1 and not right == 1 and not down == 1 and not left == 1 and self_pos not in near_enemy:
+        if len(coins) == 0 and best_crate is None and not up == 1 and not right == 1 and not down == 1 and not left == 1 and self_pos not in two_step_enemy:
             current = self_pos
             dist = {}
             dist[current] = 0
@@ -548,7 +579,7 @@ def state_to_features(game_state: dict) -> np.array:
                     #check if the tile is directly adjacent and there is currently an explosion that lasts for another turn
                     if ex_map[neigh] > 0 and dist[current] == 0:
                         valid = False
-                    if neigh in near_enemy and valid and neigh not in danger_map:
+                    if neigh in two_step_enemy and valid and neigh not in danger_map:
                         #found the shortest path enemy, break out of loops and store the last node
                         success = True
                         break
@@ -582,7 +613,6 @@ def state_to_features(game_state: dict) -> np.array:
             priority = {}
             priority[current] = 0
             score = []
-            print('escape')
 
             while c < 174:
                 neighbours = [(current[0], current[1] - 1), (current[0] + 1, current[1]), (current[0], current[1] + 1), (current[0] - 1, current[1])]
@@ -609,6 +639,10 @@ def state_to_features(game_state: dict) -> np.array:
                         dist[neigh] = dist[current] + 1
                         priority[neigh] = priority[current] + 1
                         if neigh in near_enemy:
+                            priority[neigh] += 5
+                        if neigh in adj_enemy:
+                            priority[neigh] += 5
+                        if neigh in enemies_loc:
                             priority[neigh] += 10
                         score.append(priority[neigh])
                         routes.append(neigh)
@@ -621,7 +655,16 @@ def state_to_features(game_state: dict) -> np.array:
                         priority[neigh] = priority[current] + 1
                         #prioritize routes that avoid enemies
                         if neigh in near_enemy:
+                            priority[neigh] += 1
+                        if neigh in adj_enemy:
+                            priority[neigh] += 1
+                            if dist[current] < 3:
+                                priority[neigh] += 10
+                        if neigh in enemies_loc:
                             priority[neigh] += 2
+                            if dist[current] < 3:
+                                priority[neigh] += 12
+
                 #no path possible
                 if len(qu) <= c:
                     break
@@ -631,9 +674,13 @@ def state_to_features(game_state: dict) -> np.array:
             #retrace the path to the neighbouring node of self
             if success:
                 escape = True
-                print (score)
-                print(routes)
-                index = np.argmin(score)
+                score = np.asarray(score)
+                #print (score)
+                #print(routes)
+                #break ties randomly to prevent walking in one corner
+                #print(score == np.min(score))
+                index = np.random.choice(np.flatnonzero(score == score.min()))
+                #print(index)
                 escape_route = routes[index]
                 while previous[escape_route] != self_pos:
                     escape_route = previous[escape_route]
