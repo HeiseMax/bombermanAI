@@ -4,7 +4,7 @@ import random
 
 import numpy as np
 
-#from .possible_actions import possible_actions
+from .possible_actions import possible_actions
 
 
 
@@ -148,6 +148,21 @@ def act(self, game_state: dict) -> str:
     #print(features, '\n', self.model[state])
     #print(self.model[state])
     #print(pr)
+
+    possible_Actions = possible_actions(game_state)        
+    if len(possible_Actions) == 0:
+        a = np.random.choice(ACTIONS, p=pr)
+        return a
+    p = []
+    for a in possible_Actions:
+        p.append(pr[ACTIONS.index(a)])
+    p = np.array(p)
+    if p.sum() == 0:
+        a = np.random.choice(ACTIONS, p=pr)
+        return a
+    p = p / p.sum()
+    action = np.random.choice(possible_Actions, p=p)
+    return action
 
     a = np.random.choice(ACTIONS, p=pr) #ACTIONS[np.argmax(state_to_features(game_state)@self.model)]
     #adjust action according to game state transformation via dictionary
