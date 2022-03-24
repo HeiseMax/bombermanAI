@@ -5,7 +5,7 @@ import random
 import numpy as np
 
 
-ACTIONS = np.array(['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT'])#, 'BOMB']
+ACTIONS = np.array(['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB'])
 
 
 def setup(self):
@@ -23,23 +23,41 @@ def setup(self):
     :param self: This object is passed to all callbacks and you can set arbitrary values.
     """
     if self.train or not os.path.isfile("my-saved-model.pt"):
-        # self.logger.info("Setting up model from scratch.")
-        weights = np.random.rand(8, len(ACTIONS)) - 0.5
+        self.logger.info("Setting up model from scratch.")
+        weights = np.random.rand(12, len(ACTIONS))
         self.model = weights / weights.sum()
         self.model[:,4] = 0
+        #self.model[:,5] = 0
         # with open("my-saved-model.pt", "rb") as file:
         #    self.model = pickle.load(file)
     else:
         self.logger.info("Loading model from saved state.")
         with open("my-saved-model.pt", "rb") as file:
             self.model = pickle.load(file)
-            print(self.model)
+            #print(self.model)
 
 def action_not_possible(game_state):
-    action_not_p =state_to_features(game_state)[:4]
-    action_not_p = np.where(action_not_p == 1, False, True)
-    action_not_p = np.append(action_not_p, True)
-    action_not_p = action_not_p[[3,0,2,1,4]]
+    action_not_p = []
+    current_pos = game_state['self'][3]
+    if game_state['field'][current_pos[0]+1,current_pos[1]] == 0:
+        action_not_p.append(False)
+    else:
+        action_not_p.append(True)
+    if game_state['field'][current_pos[0]-1,current_pos[1]] == 0:
+        action_not_p.append(False)
+    else:
+        action_not_p.append(True)
+    if game_state['field'][current_pos[0],current_pos[1]+1] == 0:
+        action_not_p.append(False)
+    else:
+        action_not_p.append(True)
+    if game_state['field'][current_pos[0],current_pos[1]-1]  == 0:
+        action_not_p.append(False)
+    else:
+        action_not_p.append(True)
+    action_not_p = np.append(action_not_p, False)
+    action_not_p = np.append(action_not_p, False)
+    action_not_p = action_not_p[[3,0,2,1,4,5]]
     return action_not_p
 
 def act(self, game_state: dict) -> str:
@@ -52,11 +70,11 @@ def act(self, game_state: dict) -> str:
     :return: The action to take as a string.
     """
     # todo Exploration vs exploitation
-    random_prob = .1
+    random_prob = .25
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action purely at random.")
         # 80%: walk in any direction. 10% wait. 10% bomb.
-        return np.random.choice(ACTIONS, p=[.25, .25, .25, .25, .0])
+        return np.random.choice(ACTIONS, p=[.20, .20, .20, .20, .1, .1])
 
     self.logger.debug("Querying model for action.")
     #pr = np.maximum(state_to_features(game_state)@self.model,1e-4)
@@ -67,7 +85,7 @@ def act(self, game_state: dict) -> str:
     if np.min(pr) < 0:
         pr = pr - np.minimum(pr,0)
     if np.sum(pr) == 0:
-        pr = np.array([.25,.25,.25,.25,.0])
+        pr = np.array([.25,.25,.25,.25,.0,.0])
         pr[anp] = 0
         pr /= np.sum(pr)
     #pr /= np.sum(pr)
@@ -103,8 +121,8 @@ def state_to_features(game_state: dict) -> np.array:
 
     # For example, you could construct several channels of equal shape, ... 
     coinLoc = game_state['coins']
+    selfLoc = game_state['self'][3]
     if len(coinLoc) != 0:
-        selfLoc = game_state['self'][3]
         for i in range(len(coinLoc)):
             coinDistX = coinLoc[i][0] - selfLoc[0]
             coinDistY = coinLoc[i][1] - selfLoc[1]
@@ -126,24 +144,7 @@ def state_to_features(game_state: dict) -> np.array:
         coinDist2MY = 0
         directionX = 0
         directionY = 0
-    current_pos = game_state['self'][3]
     channels = []#[1/np.min(coinDist2MY+1),1/np.min(coinDist2PX+1),1/np.min(coinDist2PY+1),1/np.min(coinDist2MX+1),1/np.min(coinDist2Wait+1)]
-    if game_state['field'][current_pos[0]+1,current_pos[1]] != -1:
-        channels.append(1)
-    else:
-        channels.append(0)
-    if game_state['field'][current_pos[0]-1,current_pos[1]] != -1:
-        channels.append(1)
-    else:
-        channels.append(0)
-    if game_state['field'][current_pos[0],current_pos[1]+1] != -1:
-        channels.append(1)
-    else:
-        channels.append(0)
-    if game_state['field'][current_pos[0],current_pos[1]-1]  != -1:
-        channels.append(1)
-    else:
-        channels.append(0)
     if np.sign(directionX) == 1:
         channels.append(1)
     else:
@@ -160,6 +161,61 @@ def state_to_features(game_state: dict) -> np.array:
         channels.append(1)
     else:
         channels.append(0)
+    
+    if game_state['field'][selfLoc[0] +1, selfLoc[1]] == 1:
+        channels.append(1)
+    else:
+        channels.append(0)
+    if game_state['field'][selfLoc[0] -1, selfLoc[1]] == 1:
+        channels.append(1)
+    else:
+        channels.append(0)
+    if game_state['field'][selfLoc[0], selfLoc[1]+1] == 1:
+        channels.append(1)
+    else:
+        channels.append(0)
+    if game_state['field'][selfLoc[0], selfLoc[1]-1] == 1:
+        channels.append(1)
+    else:
+        channels.append(0)
+    # order of bomb direction: up down left right
+    if len(game_state['bombs']) == 0:
+        channels.append(1)
+        channels.append(1)
+        channels.append(1)
+        channels.append(1)
+    else:
+        bombs = game_state['bombs'][0][0]
+        if selfLoc[0] == bombs[0]: 
+            if np.abs(selfLoc[1] - bombs[1]) < 4:
+                if selfLoc[1] < bombs[1]:
+                    channels.append(1)
+                    channels.append(0)
+                else:
+                    channels.append(0)
+                    channels.append(1)
+            else: 
+                 channels.append(1)
+                 channels.append(1)
+        else:
+            channels.append(1)
+            channels.append(1)
+        
+        if selfLoc[1] == bombs[1]: 
+            if np.abs(selfLoc[0] - bombs[0]) < 4:
+                if selfLoc[0] < bombs[0]:
+                    channels.append(1)
+                    channels.append(0)
+                else:
+                    channels.append(0)
+                    channels.append(1)
+            else: 
+                 channels.append(1)
+                 channels.append(1)
+        else:
+            channels.append(1)
+            channels.append(1)
+        
     #channels.append(np.sign(directionX))
     #channels.append(np.sign(directionY))
     #channels.append(directionX)
