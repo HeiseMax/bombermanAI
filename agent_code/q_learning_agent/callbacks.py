@@ -31,7 +31,6 @@ def setup(self):
         self.logger.info("Loading model from saved state.")
         with open("my-saved-model.pt", "rb") as file:
             self.model = pickle.load(file)
-            #print(self.model)
     #setup k-dimensional array where k is the number of features and store an id for each possible state
     self.state_space = np.arange(0, 6**6)
     self.state_space = np.reshape(self.state_space, (6, 6, 6, 6, 6, 6))
@@ -98,25 +97,6 @@ def mirror_features(features):
     temp[2] = features[0]
     return temp
 
-"""
-def choose_state(self, more_states):
-    chosen_state = more_states[0]
-    found = False
-
-    for i in range(8):
-        encoded = encode_feature(self, more_states[i][0])
-        #elements are initialized with one, therefore if this a true, we have found an edited entry
-        for element in self.model[encoded]:
-            if element != 10:
-                chosen_state = more_states[i]
-        if found:
-            break
-
-    #returns features and dictionary to transform actions
-    return chosen_state
-"""
-
-
 def act(self, game_state: dict) -> str:
     """
     Your agent should parse the input, think, and take a decision.
@@ -126,16 +106,14 @@ def act(self, game_state: dict) -> str:
     :param game_state: The dictionary that describes everything on the board.
     :return: The action to take as a string.
     """
-    # todo Exploration vs exploitation
     random_prob = 0.05
-    if self.train and random.random() < random_prob: #* 0.99**self.round:
+    if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action purely at random.")
         # 80%: walk in any direction. 10% wait. 10% bomb.
         return np.random.choice(ACTIONS, p =[.2, .2, .2, .2, .1, .1])
 
     self.logger.debug("Querying model for action.")
     features = state_to_features(game_state)
-    #print(features)
     state = encode_feature(self, features)
 
     pr = [1/6, 1/6, 1/6, 1/6, 1/6, 1/6]
@@ -144,15 +122,11 @@ def act(self, game_state: dict) -> str:
         pr = np.maximum(self.model[state], 0)
     pr /= np.sum(pr)
     print(features, '\n', self.model[state])
-    #print(self.model[state])
-    #print(pr)
 
-    a = np.random.choice(ACTIONS, p=pr) #ACTIONS[np.argmax(state_to_features(game_state)@self.model)]
+    a = np.random.choice(ACTIONS, p=pr)
     #adjust action according to game state transformation via dictionary
-    #print(a)
     self.logger.debug(f'Action taken: {a}')
-    #print(a)
-    return a#np.random.choice(ACTIONS, p=state_to_features(game_state)@self.model/np.sum(state_to_features(game_state)@self.model))
+    return a
 
 
 def state_to_features(game_state: dict) -> np.array:
@@ -171,7 +145,6 @@ def state_to_features(game_state: dict) -> np.array:
     """
     # This is the dict before the game begins and after it ends
     if game_state is None:
-        #print('returning None')
         return None
 
     #store relevant parts of the state
@@ -184,8 +157,6 @@ def state_to_features(game_state: dict) -> np.array:
         bombs_loc.append(bombs[i][0])
     ex_map = game_state['explosion_map']
     enemies_loc = []
-    #print(game_state['others'])
-    #print(game_state['others'][:][3])
     for i in range(len(game_state['others'])):
         enemies_loc.append(game_state['others'][i][3])
 
@@ -391,7 +362,6 @@ def state_to_features(game_state: dict) -> np.array:
             dist[current] = 0
             c = 1
             success = False
-            #for a real game it makes sense to set the limit a lot lower to prevent the agent from chasing after far away coins
             while c < 174 and not success:
                 neighbours = [(current[0], current[1] - 1), (current[0] + 1, current[1]), (current[0], current[1] + 1), (current[0] - 1, current[1])]
                 for neigh in neighbours:
@@ -454,10 +424,6 @@ def state_to_features(game_state: dict) -> np.array:
             previous = {}
             c = 1
             success = False
-            #crate_tiles_found = 0
-            #found = []
-            #dist = []
-            #for a real game it makes sense to set the limit a lot lower to prevent the agent from chasing after far away coins
             while c < 174 and not success:
                 neighbours = [(current[0], current[1] - 1), (current[0] + 1, current[1]), (current[0], current[1] + 1), (current[0] - 1, current[1])]
                 for neigh in neighbours:
@@ -477,10 +443,6 @@ def state_to_features(game_state: dict) -> np.array:
                     if ex_map[neigh] > 0 and dist[current] == 0:
                         valid = False
                     if field[neigh] == 1 and valid and current not in danger_map:
-                        #if there are 3 crates adjacent and this is the first tile we find, it's the only tile we store,
-                        #if it has two we search one more time etc,
-                        #crate_tiles_found += 1
-
                         #avoid running into a dead end if near an enemy
                         if self_pos in near_enemy:
                             free_tiles = 0
@@ -505,47 +467,6 @@ def state_to_features(game_state: dict) -> np.array:
                     current = qu[c - 1]
             #retrace the path to the neighbouring node of self
             if success:
-                """
-                #calculate 'clusteredness' of each tile
-                score = [1, 1, 1]
-                for k in range(len(found)):
-                    #up
-                    for i in range(3):
-                        tile = (found[k][0], found[k][1] - i - 1)
-                        #wall stops the explosion
-                        if field[tile] == - 1:
-                            break
-                        elif field[tile] == 1:
-                            score[k] += 1
-                    #right
-                    for i in range(3):
-                        tile = (found[k][0] + i + 1, found[k][1])
-                        #wall stops the explosion
-                        if field[tile] == - 1:
-                            break
-                        elif field[tile] == 1:
-                            score[k] += 1
-                    #down
-                    for i in range(3):
-                        tile = (found[k][0], found[k][1] + i + 1)
-                        #wall stops the explosion
-                        if field[tile] == - 1:
-                            break
-                        elif field[tile] == 1:
-                            score[k] += 1
-                    #left
-                    for i in range(3):
-                        tile = (found[k][0] - i - 1, found[k][1])
-                        #wall stops the explosion
-                        if field[tile] == - 1:
-                            break
-                        elif field[tile] == 1:
-                            score[k] += 1
-
-                score = np.divide(dist, score)
-                best = np.argmin(score)
-                c = dist[best]
-                """
                 best_crate = current
                 while dist[best_crate] > 1:
                     best_crate = previous[best_crate]
@@ -601,7 +522,7 @@ def state_to_features(game_state: dict) -> np.array:
 
 
         #get out of danger , even if there are no coins or crates or standing next to a crate or coin
-        if  self == 1: #(nearest_coin is None and best_crate is None) and
+        if  self == 1:
             current = self_pos
             qu = [current]
             previous = {}
@@ -675,12 +596,8 @@ def state_to_features(game_state: dict) -> np.array:
             if success:
                 escape = True
                 score = np.asarray(score)
-                #print (score)
-                #print(routes)
                 #break ties randomly to prevent walking in one corner
-                #print(score == np.min(score))
                 index = np.random.choice(np.flatnonzero(score == score.min()))
-                #print(index)
                 escape_route = routes[index]
                 while previous[escape_route] != self_pos:
                     escape_route = previous[escape_route]

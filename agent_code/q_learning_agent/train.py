@@ -141,13 +141,11 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     self.transitions.append(Transition(state_to_features(last_game_state), last_action, None, reward_from_events(self, events)))
 
     update_q_table(self)
-    #print(events)
 
 
     #self.learning_rate = 0.99 * self.learning_rate
     self.round += 1
 
-    #print(self.model)
     # Store the model
     with open("my-saved-model.pt", "wb") as file:
         pickle.dump(self.model, file)
@@ -225,14 +223,11 @@ def add_events(event_state, new_state, self_action, events):
     if dodged:
         events.append(DODGED_EVENT)
 
-    #print(events)
     return events
 
 
 def update_q_table(self):
     if self.transitions[0][0] is not None and self.transitions[0][2] is not None:
-        #set learning and discount rates. Learning rate should ideally be decaying during training
-        #learning_rate = 0.3
         discount = 0
         #update q table
 
@@ -292,10 +287,8 @@ def update_q_table(self):
             #translate action according to rotation and mirroring
             action_string = old_st[1][action_string]
             action = action_str_to_int(action_string)
-            #print(self.q_table[old_state, action])
 
             self.q_table[old_state, action] = self.q_table[old_state, action] + self.learning_rate * (self.transitions[0][3] - self.q_table[old_state, action])
-            #print(self.q_table[old_state, action])
 
         self.model = self.q_table
 
@@ -309,20 +302,17 @@ def reward_from_events(self, events: List[str]) -> int:
     """
     game_rewards = {
         e.COIN_COLLECTED: 10,
-        e.KILLED_OPPONENT: 8,
+        e.KILLED_OPPONENT: 0,
         #don't drop bombs randomly
         e.BOMB_DROPPED: -5,
-        #this could positively reinforce surviving without priority
         e.BOMB_EXPLODED: 0,
         e.CRATE_DESTROYED: 0,
         #probably a bad event that mostly increases variance and can reward bad bombs
         e.COIN_FOUND: 0,
-        #a bit tricky, as this can quickly disincentivize placing bombs in the correct spots but is also important fot the agent to learn to survive
         e.KILLED_SELF: 0,
         e.GOT_KILLED: -5,
         e.OPPONENT_ELIMINATED: 0,
-        #maybe a bit redundant?
-        e.SURVIVED_ROUND: 10,
+        e.SURVIVED_ROUND: 0,
         e.INVALID_ACTION : -5,
         e.WAITED: -1,
         e.MOVED_LEFT: -1,
@@ -344,5 +334,4 @@ def reward_from_events(self, events: List[str]) -> int:
         if event in game_rewards:
             reward_sum += game_rewards[event]
     self.logger.info(f"Awarded {reward_sum} for events {', '.join(events)}")
-    #print(reward_sum)
     return reward_sum
