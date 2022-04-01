@@ -6,12 +6,11 @@ from typing import List
 from .additional_game_states import create_additional_states
 from .callbacks import choose_mode
 
-# This is only an example!
-Transition = namedtuple('Transition',
-                        ('state', 'action'))
+Transition = namedtuple('Transition', ('state', 'action'))
 
-# Hyper parameters -- DO modify
-TRANSITION_HISTORY_SIZE = 3200  # keep only ... last transitions
+# Hyper parameters
+TRANSITION_HISTORY_SIZE = 3200
+DTREE_LEARNING_SIZE = 3000
 
 
 def setup_training(self):
@@ -46,7 +45,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     else:
         if old_game_state is not None:
             mode = choose_mode(old_game_state)
-            if mode == "DODGE_BOMB":
+            if True:  # mode == "DODGE_BOMB": # option to only train certain modes in certain situations
                 states = create_additional_states(old_game_state)
                 for state in states:
                     self.transitions.append(Transition(
@@ -66,7 +65,7 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     self.logger.debug(
         f'Encountered event(s) {", ".join(map(repr, events))} in final step')
 
-    if len(self.transitions) >= 3000:
+    if len(self.transitions) >= DTREE_LEARNING_SIZE:
         X = []
         Y = []
         for transition in self.transitions:

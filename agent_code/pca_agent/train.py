@@ -13,15 +13,13 @@ from .callbacks import initial_feature_flattening
 from .callbacks import create_additional_states
 
 # This is only an example!
-Transition = namedtuple('Transition',
-                        ('state', 'action'))  # , 'next_state', 'reward'))
-pcaTransition = namedtuple('pcaTransition',
-                        ('state'))  # , 'next_state', 'reward'))
+Transition = namedtuple('Transition', ('state', 'action'))
+pcaTransition = namedtuple('pcaTransition', ('state'))
 
-# Hyper parameters -- DO modify
-TRANSITION_HISTORY_SIZE = 3200  # keep only ... last transitions
+# Hyper parameters
+TRANSITION_HISTORY_SIZE = 3200
+DTREE_LEARNING_SIZE = 3000
 PCA_TRANSITION_HISTORY_SIZE = 60000
-RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
 
 # Events
 PLACEHOLDER_EVENT = "PLACEHOLDER"
@@ -56,7 +54,6 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     self.logger.debug(
         f'Encountered game event(s) {", ".join(map(repr, events))} in step {new_game_state["step"]}')
 
-
     if self_action is None:
         self_action = "WAIT"
     if self.train_pca:
@@ -83,20 +80,15 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
         f'Encountered event(s) {", ".join(map(repr, events))} in final step')
 
     if self.train_pca:
-        print(len(self.pcatransitions))
-        if len(self.pcatransitions) >= 59000:
+        if len(self.pcatransitions) >= PCA_TRANSITION_HISTORY_SIZE - 500:
             X = []
-            #Y = []
             for i, transition in enumerate(self.pcatransitions):
                 if transition is not None:
                     if transition[0] is not None:
                         X.append(initial_feature_flattening(transition[0]))
-                        # Y.append(transition[1])
 
             X_flattened = []
-            i = 0
             for game_state in X:
-                i += 1
                 X_flattened.append(game_state)
             pca = decomposition.PCA(n_components=self.pca_features)
             pca.fit(X_flattened)
@@ -107,41 +99,21 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
                 pickle.dump(self.pca, file)
             exit(1)
     else:
-        X = []
-        Y = []
-        for i, transition in enumerate(self.transitions):
-            if transition is not None:
-                if transition[0] is not None:
-                    X.append(transition[0][0])
-                    Y.append(transition[1])
+        if len(self.transitions) >= DTREE_LEARNING_SIZE:
+            X = []
+            Y = []
+            for i, transition in enumerate(self.transitions):
+                if transition is not None:
+                    if transition[0] is not None:
+                        X.append(transition[0][0])
+                        Y.append(transition[1])
 
-        dtree = tree.DecisionTreeClassifier()
-        dtree = dtree.fit(X, Y)
-        self.model.append(dtree)
+            self.transitions.clear()
 
-        # Store the model
-        with open("my-saved-model.pt", "wb") as file:
-            pickle.dump(self.model, file)
+            dtree = tree.DecisionTreeClassifier()
+            dtree = dtree.fit(X, Y)
+            self.model.append(dtree)
 
-
-def reward_from_events(self, events: List[str]) -> int:
-    """
-    *This is not a required function, but an idea to structure your code.*
-    Here you can modify the rewards your agent get so as to en/discourage
-    certain behavior.
-    """
-    game_rewards = {
-        e.COIN_COLLECTED: 10,
-        e.MOVED_DOWN: -0.5,
-        e.MOVED_LEFT: -0.5,
-        e.MOVED_RIGHT: -0.5,
-        e.MOVED_UP: -0.5,
-        e.WAITED: -0.5,
-        e.INVALID_ACTION: -5,
-    }
-    reward_sum = 0
-    for event in events:
-        if event in game_rewards:
-            reward_sum += game_rewards[event]
-    self.logger.info(f"Awarded {reward_sum} for events {', '.join(events)}")
-    return reward_sum
+            # Store the model
+            with open("my-saved-model.pt", "wb") as file:
+                pickle.dump(self.model, file)
