@@ -26,7 +26,11 @@ SCENARIOS = {
     "crates": {
         "CRATE_DENSITY": 0.15,
         "COIN_COUNT": 15
-    },  
+    },
+    "crate-heaven": {
+        "CRATE_DENSITY": 0.3,
+        "COIN_COUNT": 50
+    },
     # This is the tournament game mode
     "classic": {
         "CRATE_DENSITY": 0.75,

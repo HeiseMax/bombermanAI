@@ -82,7 +82,7 @@ class GenericWorld:
             match_prefix = f"{self.args.match_name} | "
         else:
             match_prefix = ""
-        self.round_id = f'{match_prefix}Round {new_round:02d} ({datetime.now().strftime("%Y-%m-%d %H-%M-%S")})'
+        self.round_id = f'{match_prefix}Round {new_round:02d}'# ({datetime.now().strftime("%Y-%m-%d %H-%M-%S")})'
 
         # Arena with wall and crate layout
         self.arena, self.coins, self.active_agents = self.build_arena()
@@ -420,8 +420,11 @@ class BombeRLeWorld(GenericWorld):
     def poll_and_run_agents(self):
         # Tell agents to act
         for a in self.active_agents:
+            state = self.get_state_for_agent(a)
+            a.store_game_state(state)
+            a.reset_game_events()
             if a.available_think_time > 0:
-                a.act(self.get_state_for_agent(a))
+                a.act(state)
 
         # Give agents time to decide
         perm = self.rng.permutation(len(self.active_agents))
@@ -477,9 +480,6 @@ class BombeRLeWorld(GenericWorld):
                     if enemy is not a:
                         pass
                         # a.wait_for_enemy_game_event_processing()
-        for a in self.active_agents:
-            a.store_game_state(self.get_state_for_agent(a))
-            a.reset_game_events()
 
     def end_round(self):
         super().end_round()
