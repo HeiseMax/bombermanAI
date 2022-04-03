@@ -8,9 +8,8 @@ import numpy as np
 from typing import List
 
 import events as e
-from .callbacks import state_to_features, state_to_features_bomb
-from .callbacks import initial_feature_flattening
-from .callbacks import create_additional_states
+from feature_flattening import feature_flattening
+from .additional_game_states import create_additional_states
 
 # This is only an example!
 Transition = namedtuple('Transition', ('state', 'action'))
@@ -63,7 +62,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
             states = create_additional_states(old_game_state)
             for state in states:
                 self.transitions.append(Transition(
-                    self.pca.transform([initial_feature_flattening(state[0])]), state[1][self_action]))
+                    self.pca.transform([feature_flattening(state[0])]), state[1][self_action]))
 
 
 def end_of_round(self, last_game_state: dict, last_action: str, events: List[str]):
@@ -85,7 +84,7 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
             for i, transition in enumerate(self.pcatransitions):
                 if transition is not None:
                     if transition[0] is not None:
-                        X.append(initial_feature_flattening(transition[0]))
+                        X.append(feature_flattening(transition[0]))
 
             X_flattened = []
             for game_state in X:

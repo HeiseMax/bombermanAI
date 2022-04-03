@@ -15,19 +15,18 @@ SCENARIOS = {
         "CRATE_DENSITY": 0.6,
         "COIN_COUNT": 0
     },
-    "crates": {
-        "CRATE_DENSITY": 0.3,
-        "COIN_COUNT": 15
-    },
     "coin-heaven": {
         "CRATE_DENSITY": 0,
-        "COIN_COUNT": 40
+        "COIN_COUNT": 50
     },
     "coin-heaven-crates": {
         "CRATE_DENSITY": 0.15,
         "COIN_COUNT": 50
+    },
+    "crates": {
+        "CRATE_DENSITY": 0.15,
+        "COIN_COUNT": 15
     },  
-    
     # This is the tournament game mode
     "classic": {
         "CRATE_DENSITY": 0.75,
@@ -57,7 +56,7 @@ BOMB_TIMER = 4
 EXPLOSION_TIMER = 2  # = 1 of bomb explosion + N of lingering around
 
 # Rules for agents
-TIMEOUT = 1.5
+TIMEOUT = 0.5
 TRAIN_TIMEOUT = float("inf")
 REWARD_KILL = 5
 REWARD_COIN = 1

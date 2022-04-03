@@ -158,12 +158,8 @@ def choose_action_dforest(self, game_state, mode):
     p = np.array(p)
     p = p / p.sum()
     if len(possible_Actions) == 0:
-        self.logger.debug("WAIT")
         return "WAIT"
     action = np.random.choice(possible_Actions, p=p)
-    self.logger.debug(possible_Actions)
-    self.logger.debug(p)
-    self.logger.debug(action)
     return action
 
 

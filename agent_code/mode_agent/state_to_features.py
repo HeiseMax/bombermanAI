@@ -38,13 +38,76 @@ def state_to_features_crates(game_state: dict) -> np.array:
     if game_state is None:
         return None
 
-    coins = game_state['coins']
     position = game_state['self'][3]
+    coins = game_state['coins']
     field = game_state['field']
     bombs = game_state['bombs']
     explosions = game_state['explosion_map']
     others = game_state['others']
     board_size = field.shape[0]
+
+    others_pos = []
+    for other in range(4):
+        if len(others) > other:
+            others_pos.append(others[other][3])
+        else:
+            others_pos.append((-1, -1))
+
+    # 25 fields around agent
+    small_field = []
+    for i in range(-2, 3):
+        for j in range(-2, 3):
+            if position[0] + i <= 0:
+                small_field.append(1)
+            elif position[0] + i >= board_size:
+                small_field.append(1)
+            elif position[1] + j <= 0:
+                small_field.append(1)
+            elif position[1] + j >= board_size:
+                small_field.append(1)
+            else:
+                if np.abs(field[position[0] + i, position[1] + j]) == 1:
+                    small_field.append(1)
+                elif explosions[position[0] + i, position[1] + j] > 0:
+                    small_field.append(1)
+                elif others_pos[0][0] == position[0] + i and others_pos[0][1] == position[1] + j:
+                    small_field.append(1)
+                elif others_pos[1][0] == position[0] + i and others_pos[1][1] == position[1] + j:
+                    small_field.append(1)
+                elif others_pos[2][0] == position[0] + i and others_pos[2][1] == position[1] + j:
+                    small_field.append(1)
+                elif others_pos[3][0] == position[0] + i and others_pos[3][1] == position[1] + j:
+                    small_field.append(1)
+                else:
+                    small_field.append(0)
+
+    # 8 entries, x and y dist to all bombs
+    bomb_dists = []
+    for bomb in range(1):
+        if len(bombs) > bomb:
+            bomb_dists.append(bombs[bomb][0][0] - position[0])
+            bomb_dists.append(bombs[bomb][0][1] - position[1])
+        else:
+            bomb_dists.append(board_size)
+            bomb_dists.append(board_size)
+
+    # 4 timers of bombs
+    bomb_times = []
+    for bomb in range(1):
+        if len(bombs) > bomb:
+            bomb_times.append(bombs[bomb][1])
+        else:
+            bomb_times.append(20)
+
+    # 8 entries, x and y dist to all others
+    # others_dists = []
+    # for other in range(4):
+    #     if len(others) > other:
+    #         others_dists.append(others[other][3][0] - position[0])
+    #         others_dists.append(others[other][3][1] - position[1])
+    #     else:
+    #         others_dists.append(board_size)
+    #         others_dists.append(board_size)
 
     min_xDist_coin = float("inf")
     min_yDist_coin = float("inf")
@@ -62,24 +125,6 @@ def state_to_features_crates(game_state: dict) -> np.array:
         min_xDist_coin = 0
         min_yDist_coin = 0
 
-    possible_Actions = possible_actions(game_state)
-    if "UP" in possible_Actions:
-        isUpValid = 1
-    else:
-        isUpValid = 0
-    if "DOWN" in possible_Actions:
-        isDownValid = 1
-    else:
-        isDownValid = 0
-    if "LEFT" in possible_Actions:
-        isLeftValid = 1
-    else:
-        isLeftValid = 0
-    if "Right" in possible_Actions:
-        isRightValid = 1
-    else:
-        isRightValid = 0
-
     # 4 nearest crates
     crates = field == 1
     crates_pos = np.where(crates == True)
@@ -95,41 +140,70 @@ def state_to_features_crates(game_state: dict) -> np.array:
 
     crates_pos_dist_squared = crates_pos_x_dist_squared + crates_pos_y_dist_squared
 
-    k = min(4, crates_pos_dist_squared.shape[0] - 1)
+    k = min(3, crates_pos_dist_squared.shape[0] - 1)
     indeces_squared = np.argpartition(crates_pos_dist_squared, k)[0:k]
     nearest_crates_Xdist = crates_pos_x_dist[indeces_squared]
     nearest_crates_Ydist = crates_pos_y_dist[indeces_squared]
 
-    while nearest_crates_Xdist.shape[0] < 4:
+    while nearest_crates_Xdist.shape[0] < 3:
         nearest_crates_Xdist = np.append(nearest_crates_Xdist, 25)
         nearest_crates_Ydist = np.append(nearest_crates_Ydist, 25)
 
-    # for i in range(crates_pos[0].shape[0]):
-    #     x_dist = crates_pos[0][i] - position[0]
-    #     y_dist = crates_pos[1][i] - position[1]
-    #     dist = np.sqrt(x_dist**2 + y_dist**2)
-    #     if dist < np.max(nearest_crates_dist):
-    #         nearest_crates_dist[np.argmax(nearest_crates_dist)] = dist
-    #         nearest_crates_Xdist[np.argmax(nearest_crates_dist)] = x_dist
-    #         nearest_crates_Ydist[np.argmax(nearest_crates_dist)] = y_dist
-
-    # sorted_ideces = np.argsort(nearest_crates_dist)
-    # nearest_crates_Xdist = np.array(nearest_crates_Xdist)
-    # nearest_crates_Ydist = np.array(nearest_crates_Ydist)
-    # nearest_crates_Xdist = nearest_crates_Xdist[sorted_ideces]
-    # nearest_crates_Ydist = nearest_crates_Ydist[sorted_ideces]
+    crates_in_radius = 0
+    up_wall = False
+    right_wall = False
+    down_wall = False
+    left_wall = False
+    for i in range(3):
+        if not up_wall:
+            if not field[position[0], position[1] - i] == -1:
+                if field[position[0], position[1] - i] == 1:
+                    crates_in_radius += 1
+            else:
+                up_wall = True
+        else:
+            up_wall = True
+        if not right_wall:
+            if not field[position[0] + i, position[1]] == -1:
+                if field[position[0] + i, position[1]] == 1:
+                    crates_in_radius += 1
+            else:
+                right_wall = True
+        else:
+            right_wall = True
+        if not down_wall:
+            if not field[position[0], position[1] + i] == -1:
+                if field[position[0], position[1] + i] == 1:
+                    crates_in_radius += 1
+            else:
+                down_wall = True
+        else:
+            down_wall = True
+        if not left_wall:
+            if not field[position[0] - i, position[1]] == -1:
+                if field[position[0] - i, position[1]] == 1:
+                    crates_in_radius += 1
+            else:
+                left_wall = True
+        else:
+            left_wall = True
 
     channels = []
     channels = np.append(channels, min_xDist_coin)
     channels = np.append(channels, min_yDist_coin)
-    channels = np.append(channels, isLeftValid)
-    channels = np.append(channels, isRightValid)
-    channels = np.append(channels, isUpValid)
-    channels = np.append(channels, isDownValid)
     channels = np.append(channels, nearest_crates_Xdist)
     channels = np.append(channels, nearest_crates_Ydist)
+    channels = np.append(channels, game_state['self'][2])
+    #print(crates_in_radius)
+    channels = np.append(channels, crates_in_radius)
+
+    #channels = np.append(channels, small_field)
+    #channels = np.append(channels, bomb_dists)
+    #channels = np.append(channels, bomb_times)
+    #channels = np.append(channels, others_dists)
     stacked_channels = np.stack(channels)
     return stacked_channels.reshape(-1)
+
 
 
 def state_to_features_fight(game_state: dict) -> np.array:
