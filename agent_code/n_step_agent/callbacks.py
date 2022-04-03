@@ -91,6 +91,7 @@ def action_not_possible(game_state):
         action_not_p[3] = True
     action_not_p = np.append(action_not_p, False)
     action_not_p = np.append(action_not_p, False)
+    #reshuffling of entries to fit with order of actions in ACTIONS
     action_not_p = action_not_p[[3,0,2,1,4,5]]
     return action_not_p
 

@@ -7,6 +7,7 @@ import pickle
 from typing import List, final
 from numpy import random
 from pygame import event
+from sklearn.metrics import mean_squared_error
 
 import events as e
 from .callbacks import state_to_features
@@ -17,8 +18,8 @@ Transition = namedtuple('Transition',
 Buffer = namedtuple('Buffer',
                         ('state', 'action', 'time_state'))
 
-gamma = 0.1
-learningrate = 1e-3
+gamma = 0.5
+learningrate = 1e-2
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT', 'BOMB']
 # Hyper parameters -- DO modify
@@ -55,13 +56,12 @@ def setup_training(self):
     self.Q_value_transition = []
 
 def squared_loss(self):
-    sqrloss = np.zeros(6)
-    for i, Q_a in enumerate(self.Q_value_transition):
-        # i+1 since Q_a gets calculated for the new state 
-        sqrloss += (self.Y_tau_t[i+1] - Q_a[0])**2
-    sqrloss /= len(self.Q_value_transition)
-
-    f = open("SquaredLoss" + str(learningrate) + str(gamma) + ".txt", "a")
+    # sqrloss = np.zeros(1)
+    # for i, Q_a in enumerate(self.Q_value_transition):
+    #     sqrloss += (self.Y_tau_t[i] - Q_a)**2
+    # sqrloss /= len(self.Q_value_transition)
+    sqrloss = [mean_squared_error(self.Y_tau_t[1:-1],self.Q_value_transition)]
+    f = open("SquaredLossDefault" + str(learningrate) + str(gamma) + ".txt", "a")
     np.savetxt(f, sqrloss, newline='\t')
     f.write('\n')
     f.close()
@@ -157,7 +157,19 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
                     break
 
     # calculation of the Q value for the (next) transition (in order to avoid the problem with the first None-state)
-    self.Q_value_transition.append(np.expand_dims(fnewstate,axis = 0)@self.model)
+    action_number = 0
+    if self_action == 'RIGHT':
+        action_number = 1
+    if self_action == 'DOWN':
+        action_number = 2
+    if self_action == 'LEFT':
+        action_number = 3
+    if self_action == 'WAIT':
+        action_number = 4
+    if self_action == 'BOMB':
+        action_number = 5
+    if old_game_state is not None:
+        self.Q_value_transition.append(foldstate@self.model[:,action_number])
 
     # state_to_features is defined in callbacks.py
     reward = reward_from_events(self,events)
@@ -296,7 +308,7 @@ def reward_from_events(self, events: List[str]) -> int:
         DANGER_EVENT: -.75,
         PLACEHOLDER_EVENT: -.1,  # idea: the custom event is bad
         NAPPROACHED_EVENT: 0.25,
-        APPROACHED_EVENT: 0.15,
+        APPROACHED_EVENT: 0.1,
         TIME_PASSED_EVENT: -0.05,
         COIN_APPROACHED_EVENT: 0.35,
         BOMB_NEXT_ENEMY_EVENT: 0.7

@@ -25,8 +25,7 @@ def setup(self):
     """
     if self.train or not os.path.isfile("my-saved-model.pt"):
         # self.logger.info("Setting up model from scratch.")
-        # weights = np.random.rand(41, len(ACTIONS))
-        # #weights[:,5] = 0
+        # weights = np.random.rand(38, len(ACTIONS))
         # self.model = weights / weights.sum()
         with open("my-saved-model.pt", "rb") as file:
           self.model = pickle.load(file)
@@ -93,7 +92,7 @@ def act(self, game_state: dict) -> str:
     :return: The action to take as a string.
     """
     # todo Exploration vs exploitation
-    random_prob = .1
+    random_prob = .001
     if self.train and random.random() < random_prob:
         self.logger.debug("Choosing action purely at random.")
         # 80%: walk in any direction. 10% wait. 10% bomb.
@@ -211,30 +210,30 @@ def state_to_features(game_state: dict) -> np.array:
         channels.append(-1)
     
     others = game_state['others']
-    for i in range(4):
-        if len(others) <= i:
+    for i in range(3):
+        if i >= len(others):
             channels.append(0)
             channels.append(0)
             channels.append(0)
             channels.append(0)
         else:
-            other = others[0][3]
+            other = others[i][3]
             diffX = other[0] - current_pos[0]
             diffY = other[1] - current_pos[1]
             if diffY < 0:
-                channels.append(1)
+                channels.append(1/np.abs(diffY))
             else:
                 channels.append(0)
             if diffX > 0:
-                channels.append(1)
+                channels.append(1/np.abs(diffX))
             else:
                 channels.append(0)
             if diffY > 0:
-                channels.append(1)
+                channels.append(1/np.abs(diffY))
             else:
                 channels.append(0)
             if diffX < 0:
-                channels.append(1)
+                channels.append(1/np.abs(diffX))
             else:
                 channels.append(0)
 
@@ -272,6 +271,13 @@ def state_to_features(game_state: dict) -> np.array:
     if np.sign(directionX) == -1:
         channels.append(1)
     else:
+        channels.append(0)
+    arena = game_state['field']
+    x= current_pos[0]
+    y = current_pos[1]
+    if  ([arena[x + 1, y], arena[x - 1, y], arena[x, y + 1], arena[x, y - 1]].count(0) == 1):
+        channels.append(1)
+    else: 
         channels.append(0)
     #channels.append(...)
     # concatenate them as a feature tensor (they must have the same shape), ...
