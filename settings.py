@@ -7,17 +7,29 @@ from fallbacks import pygame
 COLS = 17
 ROWS = 17
 SCENARIOS = {
+    "empty-field": {
+        "CRATE_DENSITY": 0,
+        "COIN_COUNT": 0
+    },
+    "only-crates": {
+        "CRATE_DENSITY": 0.6,
+        "COIN_COUNT": 0
+    },
     "coin-heaven": {
         "CRATE_DENSITY": 0,
         "COIN_COUNT": 50
     },
+    "coin-heaven-crates": {
+        "CRATE_DENSITY": 0.15,
+        "COIN_COUNT": 50
+    },
+    "crates": {
+        "CRATE_DENSITY": 0.15,
+        "COIN_COUNT": 15
+    },
     "crate-heaven": {
         "CRATE_DENSITY": 0.3,
         "COIN_COUNT": 50
-    },
-    "empty-field":{
-        "CRATE_DENSITY": 0,
-        "COIN_COUNT" : 0
     },
     # This is the tournament game mode
     "classic": {

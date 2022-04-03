@@ -112,3 +112,5 @@ agent_code/n_step_agent/*.txt
 
 replays/
 results/
+
+agent_code/agent_models
