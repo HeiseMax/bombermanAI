@@ -121,7 +121,6 @@ def act(self, game_state: dict) -> str:
     if np.max(self.model[state]) > 0:
         pr = np.maximum(self.model[state], 0)
     pr /= np.sum(pr)
-    print(features, '\n', self.model[state])
 
     a = np.random.choice(ACTIONS, p=pr)
     #adjust action according to game state transformation via dictionary
